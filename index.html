@@ -15,22 +15,18 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Online storage using JSONBin.io API (free, works globally!)
+        // Online storage using dpaste.com (no API key needed!)
         window.storage = {
             async get(key) {
                 try {
-                    const response = await fetch(`https://api.jsonbin.io/v3/b/${key}/latest`, {
-                        headers: {
-                            'X-Access-Key': '$2a$10$XqH.5qGQ4vN3YqX6LkF4LeKzH6pJH.gGqGvN5YqY6LkF4LeKzH6pJ'
-                        }
-                    });
+                    const response = await fetch(`https://dpaste.com/${key}.txt`);
                     
                     if (!response.ok) {
                         throw new Error('Mixtape not found');
                     }
                     
-                    const data = await response.json();
-                    return { key, value: JSON.stringify(data.record), shared: true };
+                    const text = await response.text();
+                    return { key, value: text, shared: true };
                 } catch (error) {
                     console.error('Error loading mixtape:', error);
                     return null;
@@ -39,28 +35,33 @@
             
             async set(key, value) {
                 try {
-                    const response = await fetch('https://api.jsonbin.io/v3/b', {
+                    const formData = new FormData();
+                    formData.append('content', value);
+                    formData.append('syntax', 'json');
+                    formData.append('expiry_days', '365');
+                    
+                    const response = await fetch('https://dpaste.com/api/v2/', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Bin-Private': 'false',
-                            'X-Access-Key': '$2a$10$XqH.5qGQ4vN3YqX6LkF4LeKzH6pJH.gGqGvN5YqY6LkF4LeKzH6pJ'
-                        },
-                        body: value
+                        body: formData
                     });
                     
                     if (!response.ok) {
                         throw new Error('Failed to save');
                     }
                     
-                    const data = await response.json();
-                    const binId = data.metadata.id;
+                    const url = await response.text();
+                    // Extract ID from URL like "https://dpaste.com/ABCD1234"
+                    const id = url.trim().split('/').pop().replace('.txt', '');
                     
-                    console.log('✓ Mixtape saved online! ID:', binId);
-                    return { key: binId, value, shared: true };
+                    console.log('✓ Mixtape saved online! ID:', id);
+                    return { key: id, value, shared: true };
                 } catch (error) {
                     console.error('Error saving mixtape:', error);
-                    return null;
+                    // Fallback to localStorage if online storage fails
+                    const fallbackId = Math.random().toString(36).substring(2, 11);
+                    localStorage.setItem(`mixtape:${fallbackId}`, value);
+                    alert('⚠️ Saved locally only. For global sharing, check your internet connection and try again.');
+                    return { key: fallbackId, value, shared: false };
                 }
             }
         };
@@ -132,7 +133,17 @@
 
           const loadMixtape = async (id) => {
             try {
-              const result = await window.storage.get(id);
+              // Try online storage first
+              let result = await window.storage.get(id);
+              
+              // Fallback to localStorage if online fails
+              if (!result) {
+                const localValue = localStorage.getItem(`mixtape:${id}`);
+                if (localValue) {
+                  result = { key: id, value: localValue, shared: false };
+                }
+              }
+              
               if (result && result.value) {
                 const data = JSON.parse(result.value);
                 setMixtape(data);
