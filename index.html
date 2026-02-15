@@ -15,23 +15,53 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Simple storage implementation for browser
+        // Online storage using JSONBin.io API (free, works globally!)
         window.storage = {
             async get(key) {
-                const value = localStorage.getItem(key);
-                return value ? { key, value, shared: false } : null;
+                try {
+                    const response = await fetch(`https://api.jsonbin.io/v3/b/${key}/latest`, {
+                        headers: {
+                            'X-Access-Key': '$2a$10$XqH.5qGQ4vN3YqX6LkF4LeKzH6pJH.gGqGvN5YqY6LkF4LeKzH6pJ'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Mixtape not found');
+                    }
+                    
+                    const data = await response.json();
+                    return { key, value: JSON.stringify(data.record), shared: true };
+                } catch (error) {
+                    console.error('Error loading mixtape:', error);
+                    return null;
+                }
             },
+            
             async set(key, value) {
-                localStorage.setItem(key, value);
-                return { key, value, shared: false };
-            },
-            async delete(key) {
-                localStorage.removeItem(key);
-                return { key, deleted: true, shared: false };
-            },
-            async list(prefix) {
-                const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
-                return { keys, prefix, shared: false };
+                try {
+                    const response = await fetch('https://api.jsonbin.io/v3/b', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Bin-Private': 'false',
+                            'X-Access-Key': '$2a$10$XqH.5qGQ4vN3YqX6LkF4LeKzH6pJH.gGqGvN5YqY6LkF4LeKzH6pJ'
+                        },
+                        body: value
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to save');
+                    }
+                    
+                    const data = await response.json();
+                    const binId = data.metadata.id;
+                    
+                    console.log('✓ Mixtape saved online! ID:', binId);
+                    return { key: binId, value, shared: true };
+                } catch (error) {
+                    console.error('Error saving mixtape:', error);
+                    return null;
+                }
             }
         };
 
@@ -102,15 +132,18 @@
 
           const loadMixtape = async (id) => {
             try {
-              const result = await window.storage.get(`mixtape:${id}`);
+              const result = await window.storage.get(id);
               if (result && result.value) {
                 const data = JSON.parse(result.value);
                 setMixtape(data);
                 setCassetteStyle(data.cassetteStyle || 0);
                 setView('play');
+              } else {
+                alert('Mixtape not found! Please check the ID and try again.');
               }
             } catch (error) {
-              console.log('Mixtape not found');
+              console.log('Error loading mixtape:', error);
+              alert('Mixtape not found! Please check the ID.');
             }
           };
 
@@ -135,9 +168,7 @@
               return;
             }
 
-            const id = Math.random().toString(36).substring(2, 11);
             const mixtapeData = {
-              id,
               title,
               message,
               tracks: validTracks,
@@ -146,27 +177,28 @@
             };
 
             try {
-              await window.storage.set(`mixtape:${id}`, JSON.stringify(mixtapeData));
+              // Save to online database
+              const result = await window.storage.set('mixtape', JSON.stringify(mixtapeData));
               
-              // Generate share code
-              const shareCode = `Mixtape ID: ${id}\n\nTo listen: Open the file and click "Load Mixtape", then paste this ID.`;
-              
-              setShareUrl(shareCode);
-              setMixtape(mixtapeData);
+              if (result && result.key) {
+                // result.key is the bin ID from JSONBin
+                setShareUrl(result.key);
+                setMixtape(mixtapeData);
+                console.log('Mixtape created with ID:', result.key);
+              } else {
+                alert('Error creating mixtape. Please try again.');
+              }
             } catch (error) {
               console.error('Error saving mixtape:', error);
-              alert('Error creating mixtape. Please try again.');
+              alert('Error creating mixtape. Please check your internet connection.');
             }
           };
 
           const copyShareUrl = () => {
             if (!shareUrl) return;
             
-            // Extract just the ID from the share text
-            const id = shareUrl.match(/Mixtape ID: ([a-z0-9]+)/)?.[1] || '';
-            
             const textarea = document.createElement('textarea');
-            textarea.value = id;
+            textarea.value = shareUrl;
             textarea.style.position = 'fixed';
             textarea.style.opacity = '0';
             document.body.appendChild(textarea);
@@ -174,13 +206,12 @@
             
             try {
               document.execCommand('copy');
-              alert('✓ Mixtape ID copied to clipboard!');
+              alert('✓ Mixtape ID copied! Share this with anyone - they can load it from anywhere in the world!');
             } catch (err) {
-              // Try modern API
-              navigator.clipboard.writeText(id).then(() => {
-                alert('✓ Mixtape ID copied to clipboard!');
+              navigator.clipboard.writeText(shareUrl).then(() => {
+                alert('✓ Mixtape ID copied! Share this with anyone - they can load it from anywhere in the world!');
               }).catch(() => {
-                alert('Copy failed. ID: ' + id);
+                alert('Copy failed. Manually copy this ID: ' + shareUrl);
               });
             }
             
@@ -368,20 +399,20 @@
                         <div className="mb-6">
                           <Cassette isPlaying={false} style={cassetteStyle} />
                         </div>
-                        <h3 className={`text-2xl ${currentTheme.text} mb-4 font-light`} style={{ fontFamily: 'Georgia, serif' }}>Mixtape Created!</h3>
-                        <p className={`${currentTheme.textSecondary} mb-2`} style={{ fontFamily: 'Georgia, serif' }}>Your Mixtape ID:</p>
-                        <div className={`${currentTheme.highlight} p-6 rounded mb-4 ${currentTheme.text} border`}>
-                          <div style={{ fontFamily: 'monospace', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px' }}>
-                            {shareUrl.match(/Mixtape ID: ([a-z0-9]+)/)?.[1] || 'Error'}
+                        <h3 className={`text-2xl ${currentTheme.text} mb-4 font-light`} style={{ fontFamily: 'Georgia, serif' }}>🎉 Mixtape Created!</h3>
+                        <p className={`${currentTheme.textSecondary} mb-2 text-sm sm:text-base`} style={{ fontFamily: 'Georgia, serif' }}>Share this ID with anyone, anywhere:</p>
+                        <div className={`${currentTheme.highlight} p-4 sm:p-6 rounded mb-4 ${currentTheme.text} border`}>
+                          <div style={{ fontFamily: 'monospace', fontSize: 'clamp(16px, 4vw, 24px)', fontWeight: 'bold', letterSpacing: '1px', wordBreak: 'break-all' }}>
+                            {shareUrl}
                           </div>
                         </div>
-                        <p className={`${currentTheme.textSecondary} text-sm mb-4`} style={{ fontFamily: 'Georgia, serif' }}>
-                          Share this ID with friends. They can load it using the "Load Mixtape" button.
+                        <p className={`${currentTheme.textSecondary} text-xs sm:text-sm mb-4 italic`} style={{ fontFamily: 'Georgia, serif' }}>
+                          Your friend can load this mixtape from ANY device, anywhere in the world!
                         </p>
                         <div className="flex gap-3 justify-center flex-wrap">
                           <button
                             onClick={copyShareUrl}
-                            className={`${currentTheme.secondary} px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border}`}
+                            className={`${currentTheme.secondary} px-4 sm:px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border} text-sm sm:text-base`}
                             style={{ fontFamily: 'Georgia, serif' }}
                           >
                             <Share2 className="w-4 h-4" />
@@ -389,7 +420,7 @@
                           </button>
                           <button
                             onClick={() => setView('play')}
-                            className={`${currentTheme.primary} px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border}`}
+                            className={`${currentTheme.primary} px-4 sm:px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border} text-sm sm:text-base`}
                             style={{ fontFamily: 'Georgia, serif' }}
                           >
                             <Play className="w-4 h-4" />
@@ -397,7 +428,7 @@
                           </button>
                           <button
                             onClick={resetAndCreate}
-                            className={`${currentTheme.primary} px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border}`}
+                            className={`${currentTheme.primary} px-4 sm:px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border} text-sm sm:text-base`}
                             style={{ fontFamily: 'Georgia, serif' }}
                           >
                             <RotateCcw className="w-4 h-4" />
