@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mixtape Maker</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Simple storage implementation for browser
+        window.storage = {
+            async get(key) {
+                const value = localStorage.getItem(key);
+                return value ? { key, value, shared: false } : null;
+            },
+            async set(key, value) {
+                localStorage.setItem(key, value);
+                return { key, value, shared: false };
+            },
+            async delete(key) {
+                localStorage.removeItem(key);
+                return { key, deleted: true, shared: false };
+            },
+            async list(prefix) {
+                const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
+                return { keys, prefix, shared: false };
+            }
+        };
+
+        // Lucide React icons as simple SVG components
+        const Music = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+        );
+
+        const Play = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        );
+
+        const Pause = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        );
+
+        const Share2 = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+        );
+
+        const Plus = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+        );
+
+        const X = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        );
+
+        const RotateCcw = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+        );
+
+        function MixtapeMaker() {
+          const [view, setView] = useState('home');
+          const [isPlaying, setIsPlaying] = useState(false);
+          const [currentTrack, setCurrentTrack] = useState(0);
+          const [mixtape, setMixtape] = useState(null);
+          
+          const [title, setTitle] = useState('');
+          const [message, setMessage] = useState('');
+          const [tracks, setTracks] = useState([{ name: '', artist: '', url: '' }]);
+          const [shareUrl, setShareUrl] = useState('');
+          const [cassetteStyle, setCassetteStyle] = useState(0);
+
+          useEffect(() => {
+            const params = new URLSearchParams(window.location.search);
+            const mixtapeId = params.get('id');
+            
+            if (mixtapeId) {
+              loadMixtape(mixtapeId);
+            }
+          }, []);
+
+          const loadMixtape = async (id) => {
+            try {
+              const result = await window.storage.get(`mixtape:${id}`);
+              if (result && result.value) {
+                const data = JSON.parse(result.value);
+                setMixtape(data);
+                setCassetteStyle(data.cassetteStyle || 0);
+                setView('play');
+              }
+            } catch (error) {
+              console.log('Mixtape not found');
+            }
+          };
+
+          const addTrack = () => {
+            setTracks([...tracks, { name: '', artist: '', url: '' }]);
+          };
+
+          const removeTrack = (index) => {
+            setTracks(tracks.filter((_, i) => i !== index));
+          };
+
+          const updateTrack = (index, field, value) => {
+            const newTracks = [...tracks];
+            newTracks[index][field] = value;
+            setTracks(newTracks);
+          };
+
+          const createMixtape = async () => {
+            const validTracks = tracks.filter(t => t.name.trim());
+            if (!title.trim() || validTracks.length === 0) {
+              alert('Please add a title and at least one track!');
+              return;
+            }
+
+            const id = Math.random().toString(36).substring(2, 11);
+            const mixtapeData = {
+              id,
+              title,
+              message,
+              tracks: validTracks,
+              cassetteStyle,
+              createdAt: new Date().toISOString()
+            };
+
+            try {
+              await window.storage.set(`mixtape:${id}`, JSON.stringify(mixtapeData));
+              
+              // Generate share code
+              const shareCode = `Mixtape ID: ${id}\n\nTo listen: Open the file and click "Load Mixtape", then paste this ID.`;
+              
+              setShareUrl(shareCode);
+              setMixtape(mixtapeData);
+            } catch (error) {
+              console.error('Error saving mixtape:', error);
+              alert('Error creating mixtape. Please try again.');
+            }
+          };
+
+          const copyShareUrl = () => {
+            if (!shareUrl) return;
+            
+            // Extract just the ID from the share text
+            const id = shareUrl.match(/Mixtape ID: ([a-z0-9]+)/)?.[1] || '';
+            
+            const textarea = document.createElement('textarea');
+            textarea.value = id;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {
+              document.execCommand('copy');
+              alert('✓ Mixtape ID copied to clipboard!');
+            } catch (err) {
+              // Try modern API
+              navigator.clipboard.writeText(id).then(() => {
+                alert('✓ Mixtape ID copied to clipboard!');
+              }).catch(() => {
+                alert('Copy failed. ID: ' + id);
+              });
+            }
+            
+            document.body.removeChild(textarea);
+          };
+
+          const loadFromId = () => {
+            const id = prompt('Enter Mixtape ID:');
+            if (id && id.trim()) {
+              loadMixtape(id.trim());
+            }
+          };
+
+          const resetAndCreate = () => {
+            window.history.pushState({}, '', window.location.pathname);
+            setView('create');
+            setTitle('');
+            setMessage('');
+            setTracks([{ name: '', artist: '', url: '' }]);
+            setShareUrl('');
+            setMixtape(null);
+            setCurrentTrack(0);
+            setIsPlaying(false);
+            setCassetteStyle(0);
+          };
+
+          const togglePlay = () => {
+            if (!isPlaying && mixtape) {
+              // When pressing play, open the track URL if it exists
+              const currentTrackData = mixtape.tracks[currentTrack];
+              if (currentTrackData.url) {
+                window.open(currentTrackData.url, '_blank');
+              }
+            }
+            setIsPlaying(!isPlaying);
+          };
+
+          const nextTrack = () => {
+            if (mixtape && currentTrack < mixtape.tracks.length - 1) {
+              const newTrack = currentTrack + 1;
+              console.log('Next track:', newTrack);
+              setCurrentTrack(newTrack);
+              setIsPlaying(false);
+            } else {
+              console.log('Already at last track');
+            }
+          };
+
+          const prevTrack = () => {
+            if (currentTrack > 0) {
+              const newTrack = currentTrack - 1;
+              console.log('Previous track:', newTrack);
+              setCurrentTrack(newTrack);
+              setIsPlaying(false);
+            } else {
+              console.log('Already at first track');
+            }
+          };
+
+          const getTheme = (style) => {
+            switch(style) {
+              case 0:
+                return {
+                  bg: 'bg-gradient-to-br from-purple-100 via-fuchsia-50 to-pink-100',
+                  card: 'bg-white bg-opacity-80 backdrop-blur-sm border-purple-200',
+                  primary: 'bg-purple-600 hover:bg-purple-700 text-white',
+                  secondary: 'bg-purple-100 hover:bg-purple-200 text-purple-800',
+                  text: 'text-purple-900',
+                  textSecondary: 'text-purple-700',
+                  border: 'border-purple-300',
+                  input: 'bg-white border-purple-300 focus:border-purple-500',
+                  highlight: 'bg-purple-100 border-purple-300'
+                };
+              case 1:
+                return {
+                  bg: 'bg-gradient-to-br from-orange-50 via-amber-50 to-red-50',
+                  card: 'bg-stone-50 bg-opacity-90 backdrop-blur-sm border-orange-200',
+                  primary: 'bg-orange-600 hover:bg-orange-700 text-white',
+                  secondary: 'bg-orange-100 hover:bg-orange-200 text-orange-900',
+                  text: 'text-orange-900',
+                  textSecondary: 'text-orange-700',
+                  border: 'border-orange-300',
+                  input: 'bg-white border-orange-300 focus:border-orange-500',
+                  highlight: 'bg-orange-100 border-orange-300'
+                };
+              case 2:
+                return {
+                  bg: 'bg-gradient-to-br from-red-50 via-pink-50 to-rose-100',
+                  card: 'bg-white bg-opacity-80 backdrop-blur-sm border-pink-200',
+                  primary: 'bg-red-500 hover:bg-red-600 text-white',
+                  secondary: 'bg-pink-100 hover:bg-pink-200 text-red-800',
+                  text: 'text-red-900',
+                  textSecondary: 'text-pink-700',
+                  border: 'border-pink-300',
+                  input: 'bg-white border-pink-300 focus:border-red-400',
+                  highlight: 'bg-pink-100 border-pink-300'
+                };
+              case 3:
+                return {
+                  bg: 'bg-gradient-to-br from-teal-50 via-emerald-50 to-cyan-50',
+                  card: 'bg-white bg-opacity-80 backdrop-blur-sm border-teal-200',
+                  primary: 'bg-teal-600 hover:bg-teal-700 text-white',
+                  secondary: 'bg-teal-100 hover:bg-teal-200 text-teal-900',
+                  text: 'text-teal-900',
+                  textSecondary: 'text-teal-700',
+                  border: 'border-teal-300',
+                  input: 'bg-white border-teal-300 focus:border-teal-500',
+                  highlight: 'bg-teal-100 border-teal-300'
+                };
+              case 4:
+              default:
+                return {
+                  bg: 'bg-amber-50',
+                  card: 'bg-stone-100 border-stone-200',
+                  primary: 'bg-amber-800 hover:bg-amber-900 text-amber-50',
+                  secondary: 'bg-stone-200 hover:bg-stone-300 text-stone-700',
+                  text: 'text-amber-900',
+                  textSecondary: 'text-stone-600',
+                  border: 'border-stone-300',
+                  input: 'bg-white border-stone-300 focus:border-amber-600',
+                  highlight: 'bg-amber-100 border-amber-300'
+                };
+            }
+          };
+
+          const currentTheme = getTheme(mixtape?.cassetteStyle ?? cassetteStyle);
+
+          if (view === 'home') {
+            return (
+              <div className={`min-h-screen ${currentTheme.bg} flex items-center justify-center p-4`}>
+                <div className="text-center">
+                  <div className="mb-8">
+                    <Music className={`w-20 h-20 mx-auto ${currentTheme.text} mb-4 opacity-70`} />
+                    <h1 className={`text-5xl font-light ${currentTheme.text} mb-2`} style={{ fontFamily: 'Georgia, serif', letterSpacing: '0.05em' }}>
+                      Mixtape
+                    </h1>
+                    <h2 className={`text-2xl ${currentTheme.textSecondary} font-light`} style={{ fontFamily: 'Georgia, serif' }}>
+                      Maker
+                    </h2>
+                  </div>
+                  
+                  <div className={`${currentTheme.card} p-8 rounded shadow-sm border max-w-md mx-auto`}>
+                    <div className="mb-6">
+                      <Cassette isPlaying={false} style={cassetteStyle} />
+                    </div>
+                    
+                    <p className={`${currentTheme.textSecondary} mb-6 text-base leading-relaxed`} style={{ fontFamily: 'Georgia, serif' }}>
+                      Create a nostalgic virtual mixtape and share it with friends
+                    </p>
+                    
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => setView('create')}
+                        className={`${currentTheme.primary} px-8 py-3 rounded font-light text-lg transition-all shadow-sm border ${currentTheme.border} w-full`}
+                        style={{ fontFamily: 'Georgia, serif' }}
+                      >
+                        Create Mixtape
+                      </button>
+                      
+                      <button
+                        onClick={loadFromId}
+                        className={`${currentTheme.secondary} px-8 py-3 rounded font-light text-lg transition-all shadow-sm border ${currentTheme.border} w-full`}
+                        style={{ fontFamily: 'Georgia, serif' }}
+                      >
+                        Load Mixtape
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (view === 'create') {
+            return (
+              <div className={`min-h-screen ${currentTheme.bg} p-4 py-8`}>
+                <div className="max-w-2xl mx-auto">
+                  <div className={`${currentTheme.card} p-8 rounded shadow-sm border`}>
+                    <h2 className={`text-3xl font-light ${currentTheme.text} mb-6`} style={{ fontFamily: 'Georgia, serif' }}>
+                      Create Your Mixtape
+                    </h2>
+                    
+                    {shareUrl ? (
+                      <div className="text-center py-8">
+                        <div className="mb-6">
+                          <Cassette isPlaying={false} style={cassetteStyle} />
+                        </div>
+                        <h3 className={`text-2xl ${currentTheme.text} mb-4 font-light`} style={{ fontFamily: 'Georgia, serif' }}>Mixtape Created!</h3>
+                        <p className={`${currentTheme.textSecondary} mb-2`} style={{ fontFamily: 'Georgia, serif' }}>Your Mixtape ID:</p>
+                        <div className={`${currentTheme.highlight} p-6 rounded mb-4 ${currentTheme.text} border`}>
+                          <div style={{ fontFamily: 'monospace', fontSize: '24px', fontWeight: 'bold', letterSpacing: '2px' }}>
+                            {shareUrl.match(/Mixtape ID: ([a-z0-9]+)/)?.[1] || 'Error'}
+                          </div>
+                        </div>
+                        <p className={`${currentTheme.textSecondary} text-sm mb-4`} style={{ fontFamily: 'Georgia, serif' }}>
+                          Share this ID with friends. They can load it using the "Load Mixtape" button.
+                        </p>
+                        <div className="flex gap-3 justify-center flex-wrap">
+                          <button
+                            onClick={copyShareUrl}
+                            className={`${currentTheme.secondary} px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border}`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          >
+                            <Share2 className="w-4 h-4" />
+                            Copy ID
+                          </button>
+                          <button
+                            onClick={() => setView('play')}
+                            className={`${currentTheme.primary} px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border}`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          >
+                            <Play className="w-4 h-4" />
+                            Preview
+                          </button>
+                          <button
+                            onClick={resetAndCreate}
+                            className={`${currentTheme.primary} px-5 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border}`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            New
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="mb-6">
+                          <label className={`block ${currentTheme.text} font-light mb-3`} style={{ fontFamily: 'Georgia, serif' }}>Choose Cassette Style</label>
+                          <div className="grid grid-cols-5 gap-3">
+                            {[
+                              { id: 0, name: 'Purple', preview: 'bg-gradient-to-br from-purple-400 to-fuchsia-500' },
+                              { id: 1, name: 'Retro', preview: 'bg-gradient-to-br from-orange-400 to-red-400' },
+                              { id: 2, name: 'Love', preview: 'bg-gradient-to-br from-red-300 to-pink-400' },
+                              { id: 3, name: 'Teal', preview: 'bg-gradient-to-br from-teal-400 to-emerald-500' },
+                              { id: 4, name: 'Vibes', preview: 'bg-gradient-to-br from-amber-600 to-orange-700' }
+                            ].map(style => (
+                              <button
+                                key={style.id}
+                                onClick={() => setCassetteStyle(style.id)}
+                                className={`p-3 rounded border-2 transition-all ${
+                                  cassetteStyle === style.id 
+                                    ? `${currentTheme.border} ring-2 ring-offset-2` 
+                                    : 'border-transparent hover:border-stone-300'
+                                }`}
+                              >
+                                <div className={`${style.preview} w-full h-12 rounded mb-1`}></div>
+                                <div className={`text-xs ${currentTheme.textSecondary} font-light`} style={{ fontFamily: 'Georgia, serif' }}>
+                                  {style.name}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mt-4">
+                            <Cassette isPlaying={false} style={cassetteStyle} />
+                          </div>
+                        </div>
+
+                        <div className="mb-6">
+                          <label className={`block ${currentTheme.text} font-light mb-2`} style={{ fontFamily: 'Georgia, serif' }}>Title</label>
+                          <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="Summer Vibes 2025"
+                            className={`w-full ${currentTheme.input} ${currentTheme.text} p-3 rounded border outline-none`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          />
+                        </div>
+
+                        <div className="mb-6">
+                          <label className={`block ${currentTheme.text} font-light mb-2`} style={{ fontFamily: 'Georgia, serif' }}>Message (Optional)</label>
+                          <textarea
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                            placeholder="Made this for you..."
+                            className={`w-full ${currentTheme.input} ${currentTheme.text} p-3 rounded border outline-none h-20`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          />
+                        </div>
+
+                        <div className="mb-6">
+                          <label className={`block ${currentTheme.text} font-light mb-3`} style={{ fontFamily: 'Georgia, serif' }}>Tracks</label>
+                          {tracks.map((track, index) => (
+                            <div key={index} className={`mb-4 ${currentTheme.highlight} p-4 rounded border`}>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className={`${currentTheme.textSecondary} font-light`} style={{ fontFamily: 'Georgia, serif' }}>Track {index + 1}</span>
+                                {tracks.length > 1 && (
+                                  <button
+                                    onClick={() => removeTrack(index)}
+                                    className="text-stone-500 hover:text-stone-700"
+                                  >
+                                    <X className="w-5 h-5" />
+                                  </button>
+                                )}
+                              </div>
+                              <input
+                                type="text"
+                                value={track.name}
+                                onChange={(e) => updateTrack(index, 'name', e.target.value)}
+                                placeholder="Song name"
+                                className={`w-full ${currentTheme.input} ${currentTheme.text} p-2 rounded border mb-2 outline-none`}
+                                style={{ fontFamily: 'Georgia, serif' }}
+                              />
+                              <input
+                                type="text"
+                                value={track.artist}
+                                onChange={(e) => updateTrack(index, 'artist', e.target.value)}
+                                placeholder="Artist"
+                                className={`w-full ${currentTheme.input} ${currentTheme.text} p-2 rounded border mb-2 outline-none`}
+                                style={{ fontFamily: 'Georgia, serif' }}
+                              />
+                              <input
+                                type="text"
+                                value={track.url}
+                                onChange={(e) => updateTrack(index, 'url', e.target.value)}
+                                placeholder="Link (optional)"
+                                className={`w-full ${currentTheme.input} ${currentTheme.text} p-2 rounded border outline-none`}
+                                style={{ fontFamily: 'Georgia, serif' }}
+                              />
+                            </div>
+                          ))}
+                          
+                          <button
+                            onClick={addTrack}
+                            className={`${currentTheme.secondary} px-4 py-2 rounded transition-all flex items-center gap-2 w-full justify-center border ${currentTheme.border} font-light`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          >
+                            <Plus className="w-5 h-5" />
+                            Add Track
+                          </button>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setView('home')}
+                            className={`${currentTheme.secondary} px-6 py-3 rounded font-light transition-all flex-1 border ${currentTheme.border}`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={createMixtape}
+                            className={`${currentTheme.primary} px-6 py-3 rounded font-light transition-all flex-1 shadow-sm border ${currentTheme.border}`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          >
+                            Create & Share
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          if (view === 'play' && mixtape) {
+            const currentTrackData = mixtape.tracks[currentTrack];
+            
+            return (
+              <div className={`min-h-screen ${currentTheme.bg} flex items-center justify-center p-4`}>
+                <div className="max-w-2xl w-full">
+                  <div className={`${currentTheme.card} p-8 rounded shadow-sm border`}>
+                    <h2 className={`text-3xl font-light ${currentTheme.text} mb-2 text-center`} style={{ fontFamily: 'Georgia, serif' }}>
+                      {mixtape.title}
+                    </h2>
+                    
+                    {mixtape.message && (
+                      <p className={`${currentTheme.textSecondary} text-center mb-6 italic`} style={{ fontFamily: 'Georgia, serif' }}>"{mixtape.message}"</p>
+                    )}
+
+                    <div className="mb-8">
+                      <Cassette isPlaying={isPlaying} style={mixtape.cassetteStyle || 0} />
+                    </div>
+
+                    <div className={`${currentTheme.highlight} p-6 rounded mb-6 border`}>
+                      <div className="text-center mb-4">
+                        <div className={`${currentTheme.textSecondary} text-xs mb-1 uppercase`} style={{ fontFamily: 'Georgia, serif' }}>Now Playing</div>
+                        <div className={`${currentTheme.text} text-2xl font-light mb-1`} style={{ fontFamily: 'Georgia, serif' }}>{currentTrackData.name}</div>
+                        <div className={`${currentTheme.textSecondary} text-lg font-light`} style={{ fontFamily: 'Georgia, serif' }}>{currentTrackData.artist}</div>
+                        <div className={`${currentTheme.textSecondary} text-sm mt-2`} style={{ fontFamily: 'Georgia, serif' }}>
+                          Track {currentTrack + 1} of {mixtape.tracks.length}
+                        </div>
+                      </div>
+
+                      {currentTrackData.url ? (
+                        <div className="text-center">
+                          <a
+                            href={currentTrackData.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`${currentTheme.text} hover:opacity-80 underline text-sm`}
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          >
+                            🎵 Listen on Spotify/YouTube
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <span className={`${currentTheme.textSecondary} text-sm italic`} style={{ fontFamily: 'Georgia, serif' }}>
+                            No link provided for this track
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-center gap-3 mb-8">
+                      <div className="flex items-center gap-4 w-full max-w-md">
+                        <button
+                          onClick={prevTrack}
+                          disabled={currentTrack === 0}
+                          className={`${currentTheme.secondary} px-5 py-2 rounded font-light transition-all disabled:opacity-30 disabled:cursor-not-allowed border ${currentTheme.border} flex-shrink-0`}
+                          style={{ fontFamily: 'Georgia, serif' }}
+                        >
+                          ← Prev
+                        </button>
+                        
+                        <button
+                          onClick={togglePlay}
+                          className={`${currentTheme.primary} px-6 py-2 rounded font-light transition-all flex items-center gap-2 shadow-sm border ${currentTheme.border} flex-shrink-0`}
+                          style={{ fontFamily: 'Georgia, serif' }}
+                        >
+                          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                          {isPlaying ? 'Pause' : 'Play'}
+                        </button>
+                        
+                        <button
+                          onClick={nextTrack}
+                          disabled={currentTrack === mixtape.tracks.length - 1}
+                          className={`${currentTheme.secondary} px-5 py-2 rounded font-light transition-all disabled:opacity-30 disabled:cursor-not-allowed border ${currentTheme.border} flex-shrink-0`}
+                          style={{ fontFamily: 'Georgia, serif' }}
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={`border-t ${currentTheme.border} pt-6`}>
+                      <div className={`${currentTheme.text} font-light mb-3 text-center`} style={{ fontFamily: 'Georgia, serif' }}>Track Listing</div>
+                      <div className="space-y-2">
+                        {mixtape.tracks.map((track, index) => (
+                          <div
+                            key={index}
+                            onClick={() => setCurrentTrack(index)}
+                            className={`p-3 rounded cursor-pointer transition-all ${
+                              index === currentTrack
+                                ? `${currentTheme.highlight} border`
+                                : `bg-white hover:${currentTheme.highlight} border ${currentTheme.border}`
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`${currentTheme.textSecondary} font-mono text-sm w-8`}>
+                                {String(index + 1).padStart(2, '0')}
+                              </span>
+                              <div className="flex-1">
+                                <div className={`${currentTheme.text} font-light`} style={{ fontFamily: 'Georgia, serif' }}>{track.name}</div>
+                                <div className={`${currentTheme.textSecondary} text-sm font-light`} style={{ fontFamily: 'Georgia, serif' }}>{track.artist}</div>
+                              </div>
+                              {index === currentTrack && isPlaying && (
+                                <div className={`${currentTheme.textSecondary} animate-pulse`}>♪</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 text-center">
+                      <button
+                        onClick={resetAndCreate}
+                        className={`${currentTheme.text} hover:opacity-80 underline font-light`}
+                        style={{ fontFamily: 'Georgia, serif' }}
+                      >
+                        Create your own mixtape
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return null;
+        }
+
+        function Cassette({ isPlaying, style = 0 }) {
+          const cassetteBody = (
+            <div className="relative mx-auto w-96 h-60 bg-gradient-to-b from-stone-900 to-black rounded-sm shadow-lg border border-stone-800" style={{ aspectRatio: '1.6/1' }}>
+              {/* Top label */}
+              <div className="absolute top-6 left-6 right-6 h-20 bg-stone-50 rounded-sm flex items-center justify-center border border-stone-300 shadow-inner">
+                <div className="text-center">
+                  <div className="text-stone-800 font-light text-base tracking-wider" style={{ fontFamily: 'Georgia, serif' }}>
+                    {style === 0 ? 'Purple Dream' : style === 1 ? 'Retro Vibes' : style === 2 ? 'Love Letter ♥' : style === 3 ? 'Teal Wave' : 'Good Vibes Only'}
+                  </div>
+                  <div className="text-stone-400 text-xs mt-0.5 uppercase tracking-widest" style={{ fontFamily: 'Georgia, serif', fontSize: '9px' }}>
+                    Standard Type I
+                  </div>
+                </div>
+              </div>
+
+              {/* Stripe */}
+              <div className="absolute top-28 left-6 right-6 h-8 rounded-sm overflow-hidden shadow-inner">
+                {style === 0 && <div className="h-full bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-400"></div>}
+                {style === 1 && (
+                  <div className="flex flex-col justify-center gap-0.5 h-full">
+                    <div className="h-1.5 bg-orange-600"></div>
+                    <div className="h-1.5 bg-orange-500"></div>
+                    <div className="h-1.5 bg-red-500"></div>
+                    <div className="h-1.5 bg-orange-600"></div>
+                  </div>
+                )}
+                {style === 2 && <div className="h-full bg-gradient-to-r from-red-400 via-pink-400 to-rose-400"></div>}
+                {style === 3 && <div className="h-full bg-gradient-to-r from-teal-400 via-cyan-400 to-emerald-400"></div>}
+                {style === 4 && (
+                  <>
+                    <div className="h-full bg-gradient-to-b from-pink-400 via-purple-400 to-blue-400"></div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-orange-300 via-yellow-300 to-pink-300 opacity-60"></div>
+                  </>
+                )}
+              </div>
+
+              {/* Tape window */}
+              <div className="absolute top-36 left-6 right-6 h-16 bg-black rounded-sm flex items-center justify-around px-8 border border-stone-800">
+                <div className={`w-14 h-14 rounded-full bg-gradient-to-br from-stone-700 to-stone-800 border-2 border-stone-600 flex items-center justify-center shadow-md ${isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }}>
+                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-stone-600 to-stone-700 flex items-center justify-center">
+                    <div className="w-3 h-3 rounded-full bg-stone-900"></div>
+                  </div>
+                </div>
+                <div className={`w-14 h-14 rounded-full bg-gradient-to-br from-stone-700 to-stone-800 border-2 border-stone-600 flex items-center justify-center shadow-md ${isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }}>
+                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-stone-600 to-stone-700 flex items-center justify-center">
+                    <div className="w-3 h-3 rounded-full bg-stone-900"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom holes */}
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-16">
+                <div className="w-5 h-5 rounded bg-stone-800 border border-stone-700"></div>
+                <div className="w-3 h-3 rounded-sm bg-stone-800 border border-stone-700"></div>
+                <div className="w-5 h-5 rounded bg-stone-800 border border-stone-700"></div>
+              </div>
+
+              {/* Screws */}
+              <div className="absolute top-2 left-2 w-3 h-3 rounded-full bg-stone-700 border border-stone-600"></div>
+              <div className="absolute top-2 right-2 w-3 h-3 rounded-full bg-stone-700 border border-stone-600"></div>
+              <div className="absolute bottom-2 left-2 w-3 h-3 rounded-full bg-stone-700 border border-stone-600"></div>
+              <div className="absolute bottom-2 right-2 w-3 h-3 rounded-full bg-stone-700 border border-stone-600"></div>
+              <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 w-2 h-2 rounded-full bg-stone-700 border border-stone-600"></div>
+            </div>
+          );
+
+          return cassetteBody;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<MixtapeMaker />);
+    </script>
+</body>
+</html>
